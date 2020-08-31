@@ -1,0 +1,237 @@
+#####################
+# Build model
+#####################
+
+# Here we define our model as a class
+class CNN_LSTM(nn.Module):
+    def __init__(self, input_ch = 1, N_classes = 2):
+        super(CNN_LSTM, self).__init__()
+        self.input_ch = input_ch
+        self.ch1, self.ch2 = 16, 32 
+        self.cnn_embed_dim = 8 #cnn-embedded dim 
+        self.k1, self.k2 = 5, 5
+        self.h_d = 8
+        self.num_layers = 2
+        self.N_classes = N_classes
+
+        self.cnn1 = nn.Conv2d(self.input_ch, self.ch1, self.k1)
+        self.cnn2 = nn.Conv2d(self.ch1, self.ch2, self.k2)
+
+        self.fc1 = nn.Linear(((10-self.k1+1)-self.k2+1)**2 * self.ch2, self.cnn_embed_dim) # 10 is image size
+        
+        self.lstm = nn.LSTM(self.cnn_embed_dim, self.h_d, self.num_layers)
+        
+        self.fc2 = nn.Linear(self.h_d, self.N_classes)
+        self.softmax = nn.Softmax()
+
+
+    def forward(self, X_stacked):
+        
+        #print(X_stacked.size())
+        batch_size, timesteps, C, H, W = X_stacked.size()
+        cnn_in  =  X_stacked.view(batch_size*timesteps, C, H, W)#need to be checked
+        
+        x = self.cnn1(cnn_in)
+        x = nn.functional.relu(x)
+
+        x = self.cnn2(x)
+        x = nn.functional.relu(x)
+        
+#         print(x.shape)
+        x = x.view(-1, ((10-self.k1+1)-self.k2+1)**2 * self.ch2)
+        x = self.fc1(x)
+        x = nn.functional.relu(x)
+#         print(x.shape)
+        
+        x = x.view(batch_size, timesteps, self.cnn_embed_dim)
+        x = x.permute(1,0,2)
+        embed = x
+
+        lstm_out, (h_n, h_c) = self.lstm(x.view(-1, batch_size, self.cnn_embed_dim))# -1 is timesteps here
+        
+        y_pred = self.fc2(lstm_out[-1].view(batch_size, -1))# -1 is self.h_d here
+        #y_pred = self.softmax(y_pred)
+
+        return y_pred, embed
+    
+class Linear_LSTM(nn.Module):
+    def __init__(self, input_ch = 1, N_classes = 2):
+        super(Linear_LSTM, self).__init__()
+        self.input_ch = input_ch 
+        self.cnn_embed_dim = 8 #cnn-embedded dim 
+        self.h_d = 8
+        self.num_layers = 2
+        self.N_classes = N_classes
+
+        self.fc1 = nn.Linear(10*10, self.cnn_embed_dim, bias = True) # 10 is image size
+#         self.lstm = nn.LSTM(self.cnn_embed_dim, self.h_d, self.num_layers)
+        self.lstm = nn.LSTM(self.cnn_embed_dim, self.h_d, self.num_layers)
+        
+        self.fc2 = nn.Linear(self.h_d, self.N_classes)
+#         self.fc1.weight.data.fill_(0.01)
+        self.softmax = nn.Softmax()
+      
+    #separate operations on each channel
+    def divide_inputs(self,X):
+        batch_size, timesteps, C, H, W = X.size()
+        x  =  X.view(batch_size*timesteps, C, H*W)
+        embed = self.fc1(x[:,0,:])
+
+        for i in range(C-1):
+            embed = torch.cat((embed,self.fc1(x[:,i+1,:])), dim = 1)
+
+        return embed             
+
+    def forward(self, X_stacked):
+        
+#         print(X_stacked.size())
+        batch_size, timesteps, C, H, W = X_stacked.size()
+        
+#         x  =  X_stacked.view(batch_size*timesteps, C*H*W)#need to be checked
+        
+#         x = self.fc1(x)
+#         x = nn.functional.relu(x)
+        x = self.divide_inputs(X_stacked)  
+        
+        x = x.view(batch_size, timesteps, self.cnn_embed_dim)
+        x = x.permute(1,0,2)
+        embed = x#here view may distort the X
+
+        lstm_out, (h_n, h_c) = self.lstm(x)# -1 is timesteps here
+                                           # here view distort the X
+     
+        y_pred = self.fc2(lstm_out[-1].view(batch_size, -1))# -1 is self.h_d here
+        #y_pred = self.softmax(y_pred)
+
+        return y_pred, embed
+
+#this model is constructed to mimic extracting 1d time information, checked
+class Linear_CNN1D(nn.Module):
+    def __init__(self, input_ch = 1, N_classes = 2):
+        super(Linear_CNN1D, self).__init__()
+        self.input_ch = input_ch         
+        self.ch1, self.ch2, self.ch3 = 6, 16, 26 
+        self.k1, self.k2, self.k3 = 5, 5, 3
+
+
+        self.embed_dim = 1 #cnn-embedded dim 
+
+        self.N_classes = N_classes
+
+        self.cnn1 = nn.Conv1d(self.input_ch, self.ch1, self.k1, stride=2)
+        self.cnn2 = nn.Conv1d(self.ch1, self.ch2, self.k2, stride=2)
+        self.cnn3 = nn.Conv1d(self.ch2, self.ch3, self.k3, stride=2)
+        
+        self.fc1 = nn.Linear(1*10*10, self.embed_dim) # 10 is image size
+        self.fc2 = nn.Linear(26, 8)
+        self.fc3 = nn.Linear(8, self.N_classes)
+        
+        self.fc1.weight.data.fill_(0.01)
+        self.softmax = nn.Softmax()
+
+
+    def forward(self, X_stacked):
+        
+
+        batch_size, timesteps, C, H, W = X_stacked.size()
+        x  =  X_stacked.view(batch_size*timesteps, C*H*W)#need to be checked
+        
+        x = self.fc1(x)
+        #x = nn.functional.leaky_relu(x)
+
+        x = x.view(batch_size, 1, -1)
+        emd = x
+
+        x = nn.functional.max_pool1d(self.cnn1(x),2)
+        x = nn.functional.max_pool1d(self.cnn2(x),2)
+        x = nn.functional.max_pool1d(self.cnn3(x),2)
+
+        x = x.view(-1, self.num_flat_features(x))
+        x = nn.functional.relu(self.fc2(x))
+
+        y_pred = self.fc3(x)
+
+        y_pred = self.softmax(y_pred)
+
+        return y_pred, emd
+    
+    
+    def num_flat_features(self, x):
+        size = x.size()[1:]  # all dimensions except the batch dimension
+        num_features = 1
+        for s in size:
+            num_features *= s
+        return num_features
+    
+class CNN_ENCODER_LSTM(nn.Module):
+    def __init__(self, input_ch = 1, N_classes = 2):
+        super(CNN_ENCODER_LSTM, self).__init__()
+        self.input_ch = input_ch
+        self.ch1, self.ch2 = 4, 8 
+        self.cnn_embed_dim = 8 #cnn-embedded dim 
+        self.k1, self.k2 = 5, 5
+        self.h_d = 8
+        self.num_layers = 2
+        self.N_classes = N_classes
+        
+        self.encoder = nn.Sequential(
+            nn.Conv2d(self.input_ch, self.ch1, self.k1),
+            nn.ReLU(True),
+            nn.Conv2d(self.ch1, self.ch2, self.k2),
+            nn.ReLU(True)
+            )
+
+        self.fc1 = nn.Linear(((10-self.k1+1)-self.k2+1)**2 * self.ch2, self.cnn_embed_dim) # 10 is image size
+        
+        self.lstm = nn.LSTM(self.cnn_embed_dim, self.h_d, self.num_layers)
+        
+        self.fc2 = nn.Linear(self.h_d, self.N_classes)
+        self.softmax = nn.Softmax()
+
+
+    def forward(self, X_stacked):
+        
+        #print(X_stacked.size())
+        batch_size, timesteps, C, H, W = X_stacked.size()
+        cnn_in  =  X_stacked.view(batch_size*timesteps, C, H, W)#need to be checked
+        
+        x = self.encoder(cnn_in)
+        
+#         print(x.shape)
+        x = x.view(-1, ((10-self.k1+1)-self.k2+1)**2 * self.ch2)
+        x = self.fc1(x)
+        x = nn.functional.relu(x)
+#         print(x.shape)
+        
+        x = x.view(batch_size, timesteps, self.cnn_embed_dim)
+        x = x.permute(1,0,2)
+        embed = x
+
+        lstm_out, (h_n, h_c) = self.lstm(x.view(-1, batch_size, self.cnn_embed_dim))# -1 is timesteps here
+        
+        y_pred = self.fc2(lstm_out[-1].view(batch_size, -1))# -1 is self.h_d here
+        #y_pred = self.softmax(y_pred)
+
+        return y_pred, embed
+    
+class Autoencoder(nn.Module):
+    def __init__(self):
+        super(Autoencoder,self).__init__()
+        
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, 4, kernel_size=5),
+            nn.ReLU(True),
+            nn.Conv2d(4,8,kernel_size=5),
+            nn.ReLU(True))
+            
+        self.decoder = nn.Sequential(             
+            nn.ConvTranspose2d(8,4,kernel_size=5),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(4,1,kernel_size=5),
+            nn.ReLU(True))
+    def forward(self,x):
+        x = self.encoder(x)
+        embed = x
+        x = self.decoder(x)
+
+        return x, embed
