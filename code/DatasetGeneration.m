@@ -4,7 +4,7 @@ format long;
 %
 % | Version | Author | Date     | Commit
 % | 0.1     | ZhouXY | 20.05.01 | The init version
-% generate some empty folders, encountering boundaries, need to be fixed
+% 
 tic;
 
 dataset_root_path = 'Z:\DataSet\202009_Kp_SSap_Ecoli\train\Ecoli\';
