@@ -1,11 +1,12 @@
 
 %% % Parameters
 tic;
-frames_path = 'C:\Users\ZXY\Desktop\ASU\Lab\DivisionTrack\Z_estimation_examples_yunlei\20200817_Copy\data\2umPSNP20Xdilu\1_short2\';
-no_event_path = 'Z:\DataSet\EventDetection\no_event';
-event_path = 'Z:\DataSet\EventDetection\event';
+% C:\Users\ZXY\Desktop\ASU\Lab\DivisionTrack\Z_estimation_examples_yunlei\20200817_Copy\data\2umPSNP20Xdilu\1_short2\
+frames_path = 'C:\Users\ZXY\Desktop\ASU\Lab\DivisionTrack\Z_estimation_examples_yunlei\20200817_Copy\data\2umPSNP20Xdilu\1\';
+no_event_path = 'Z:\DataSet\EventDetection\20200921_2\no_event';
+event_path = 'Z:\DataSet\EventDetection\20200921_2\event';
 
-high_threshold = 10;
+high_threshold = 5;
 
 %% load images and initialize filter operated images, detected particles
 all_images = LoadImages(frames_path);% size (#frames,h,w)
@@ -28,13 +29,14 @@ end
 TextProgressBar('Done ');
 %%
 
-h = 10;
-w = 10;
+h = 20;
+w = 20;
 h2 = 40;
 w2 = 40;
 exit = false;
 TextProgressBar('Particle classification: ');
-for i = 1:size(all_images_bright_particles,2)
+%interval 10
+for i = 255:50:size(all_images_bright_particles,2)
     TextProgressBar((i/leng)*100); 
     one_frame_particles = all_images_bright_particles{i};
     image = squeeze(all_images(i,:,:));
@@ -44,7 +46,7 @@ for i = 1:size(all_images_bright_particles,2)
         x = ceil(one_frame_particles(j,2));
         y = ceil(one_frame_particles(j,1));
         if x-h2/2+1< 1 || x+h2/2> image_h || y-w2/2+1<1 || y+w2/2>image_w
-            break
+            continue
         end
         %show particles
         single_particle = image(x-h/2+1:x+h/2, y-w/2+1:y+w/2);
@@ -55,7 +57,7 @@ for i = 1:size(all_images_bright_particles,2)
         subplot(1,2,2)
         f = imshow(single_particle_surroundings, 'DisplayRange',[min(single_particle(:)) max(single_particle(:))], 'InitialMagnification',400);
         title('The particle large ROI')
-        movegui(f, 'south')
+        movegui(f, 'east')
         %classification
         exit = ChooseClass(single_particle, no_event_path, event_path, i , j);
         
